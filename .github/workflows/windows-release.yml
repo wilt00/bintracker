@@ -273,7 +273,7 @@ jobs:
           Windows packages built from commit \`${GITHUB_SHA}\`.
 
           - \`bintracker-windows-x64.zip\`: MSYS2 UCRT64 build
-          - \`bintracker-windows-arm64.zip\`: MSYS2 CLANGARM64 build (untested on physical ARM64 hardware)
+          - \`bintracker-windows-arm64.zip\`: MSYS2 CLANGARM64 build; its bundled x64 Tclkit runs through Windows emulation (ARM64 package untested)
 
           Tclkit is bundled. MAME is not bundled; install it globally so \`mame.exe\` is available on \`PATH\`.
           EOF
