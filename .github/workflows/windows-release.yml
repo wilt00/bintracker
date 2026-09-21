@@ -136,6 +136,31 @@ jobs:
           package="${MINGW_PACKAGE_PREFIX}-chicken"
           echo "version=$(pacman -Q "$package" | awk '{print $2}')" >> "$GITHUB_OUTPUT"
 
+      - name: Map Chicken's native prefix
+        shell: pwsh
+        run: |
+          # Chicken 5.4 embeds /ucrt64 paths. Native Windows tools resolve those
+          # from the current drive rather than through MSYS2's mount table.
+          $target = (Resolve-Path (Join-Path $env:RUNNER_TEMP 'msys64\${{ matrix.prefix }}')).Path
+          $roots = @(
+            [IO.Path]::GetPathRoot($env:GITHUB_WORKSPACE)
+            [IO.Path]::GetPathRoot($env:RUNNER_TEMP)
+          ) | Sort-Object -Unique
+
+          foreach ($root in $roots) {
+            $link = Join-Path $root '${{ matrix.prefix }}'
+            if (Test-Path -LiteralPath $link) {
+              throw "Refusing to replace existing path: $link"
+            }
+            New-Item -ItemType Junction -Path $link -Target $target | Out-Null
+            Write-Host "Mapped $link to $target"
+          }
+
+          # Keep generated .bat files on a drive where the same junction exists.
+          $eggCache = Join-Path $env:RUNNER_TEMP 'chicken-install'
+          New-Item -ItemType Directory -Force -Path $eggCache | Out-Null
+          "CHICKEN_EGG_CACHE=$eggCache" >> $env:GITHUB_ENV
+
       - name: Cache Chicken eggs
         id: cache-eggs
         uses: actions/cache@v6
