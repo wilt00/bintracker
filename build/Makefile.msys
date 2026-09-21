@@ -172,19 +172,19 @@ TAGS: $(BT_SRC)bt-types.scm\
 
 .PHONY: mame-bridge
 mame-bridge:
-	xcopy /y /s /i ..\\mame-bridge mame-bridge
+	cp -r $(BT_SRC)mame-bridge ./
 
 .PHONY: config
 config:
-	xcopy /y /s /i ..\\config config
+	cp -r $(BT_SRC)config ./
 
 .PHONY: roms
 roms:
-	xcopy /y /s /i ..\\roms roms
+	cp -r $(BT_SRC)roms ./
 
 .PHONY: plugins
 plugins:
-	xcopy /y /s /i ..\\plugins plugins
+	cp -r $(BT_SRC)plugins ./
 
 .PHONY: plugin-docs
 plugin-docs:
@@ -197,20 +197,21 @@ plugin-docs:
 
 .PHONY: resources
 resources:
-	xcopy /y /s /i ..\\resources\icons resources\icons\
+	mkdir -p resources/
+	cp -r $(BT_SRC)resources/icons resources/
 
 .PHONY: aux-files
 aux-files:
-	xcopy /y /s /i ..\mdef mdef
-	xcopy /y /s /i ..\tunes tunes
+	cp -r $(BT_SRC)mdef ./
+	cp -r $(BT_SRC)tunes ./
 
 .PHONY: mdal-targets
 mdal-targets:
-	xcopy /y /s /i ..\\libmdal\\mdal-targets mdal-targets
+	cp -r $(MDAL_SRC)mdal-targets ./
 
 .PHONY: 3rdparty
 3rdparty:
-	xcopy /y /s /i ..\\3rdparty 3rdparty
+	cp -r $(BT_SRC)3rdparty ./
 
 # run unit tests
 .PHONY: tests
