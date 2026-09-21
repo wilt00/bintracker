@@ -94,7 +94,7 @@ jobs:
       - name: Verify script line endings
         shell: pwsh
         run: |
-          $scripts = git ls-files '*.scm' '*.lua' 'build/Makefile*'
+          $scripts = git ls-files '*.scm' '*.lua' '*.sh' 'build/Makefile*'
           $withCr = foreach ($script in $scripts) {
             if ([IO.File]::ReadAllBytes((Resolve-Path $script)) -contains 13) { $script }
           }
@@ -145,24 +145,7 @@ jobs:
 
       - name: Install Chicken eggs
         if: steps.cache-eggs.outputs.cache-hit != 'true'
-        run: |
-          eggs=(
-            srfi-18 check-errors args base64 bitstring comparse coops
-            list-utils matchable pstk s11n simple-md5 sqlite3
-            stb-image stb-image-write srfi-1 srfi-4 srfi-13 srfi-14
-            srfi-69 shell stack test typed-records web-colors
-          )
-          for attempt in 1 2 3; do
-            if chicken-install "${eggs[@]}"; then
-              exit 0
-            fi
-            if test "$attempt" -eq 3; then
-              echo 'Chicken egg installation failed after three attempts.' >&2
-              exit 1
-            fi
-            echo "Chicken egg installation attempt $attempt failed; retrying..." >&2
-            sleep $((attempt * 15))
-          done
+        run: .github/scripts/install-chicken-eggs.sh
 
       - name: Add Tclkit
         uses: actions/download-artifact@v8
@@ -171,75 +154,17 @@ jobs:
           path: 3rdparty
 
       - name: Build and test
-        run: |
-          cd build
-          make -f Makefile.msys RELEASE=1 bintracker.exe
-
-          dependencies="$(ldd ./bintracker.exe)"
-          printf '%s\n' "$dependencies"
-          if grep -q 'not found' <<<"$dependencies"; then
-            echo 'A runtime DLL could not be resolved.' >&2
-            exit 1
-          fi
-          while IFS= read -r dependency; do
-            case "$dependency" in
-              "$MINGW_PREFIX"/bin/*.dll) cp -f "$dependency" . ;;
-            esac
-          done < <(awk '/=> \// { print $3 }' <<<"$dependencies")
-
-          objdump -f bintracker.exe | tee object-format.txt
-          grep -F 'architecture: ${{ matrix.object-arch }}' object-format.txt
+        env:
+          OBJECT_ARCH: ${{ matrix.object-arch }}
+        run: .github/scripts/build-test.sh
 
       - name: Test bundled Tclkit
-        run: |
-          smoke_script="$RUNNER_TEMP/tclkit-smoke.tcl"
-          smoke_result="$RUNNER_TEMP/tclkit-smoke.txt"
-          cat > "$smoke_script" <<'EOF'
-          package require Tk
-          wm withdraw .
-          set channel [open [lindex $argv 0] w]
-          puts $channel [info patchlevel]
-          close $channel
-          destroy .
-          exit
-          EOF
-          rm -f "$smoke_result"
-          ./build/3rdparty/tclkit.exe "$smoke_script" "$smoke_result"
-          for attempt in {1..50}; do
-            test -f "$smoke_result" && break
-            sleep 0.1
-          done
-          grep -E '^8\.6\.' "$smoke_result"
+        run: .github/scripts/test-tclkit.sh
 
       - name: Create portable archive
-        run: |
-          stage="$RUNNER_TEMP/bintracker"
-          archive="$GITHUB_WORKSPACE/bintracker-windows-${{ matrix.arch }}.zip"
-          rm -rf "$stage"
-          mkdir -p "$stage/3rdparty"
-
-          cp build/bintracker.exe "$stage/"
-          find build -maxdepth 1 -type f -iname '*.dll' -exec cp -f '{}' "$stage/" ';'
-          cp build/3rdparty/tclkit.exe "$stage/3rdparty/"
-          cp -r build/config build/mame-bridge build/mdal-targets build/mdef \
-            build/plugins build/resources build/roms build/tunes "$stage/"
-          cp LICENSE "$stage/"
-
-          test -f "$stage/bintracker.exe"
-          test -f "$stage/3rdparty/tclkit.exe"
-          test ! -e "$stage/3rdparty/mame"
-          ! find "$stage" -type f -iname 'mame.exe' -print -quit | grep -q .
-          grep -F 'program-name: "mame.exe"' "$stage/config/emulators.windows.scm"
-
-          (cd "$stage" && zip -q -9 -r "$archive" .)
-          verify="$RUNNER_TEMP/archive-check"
-          rm -rf "$verify"
-          mkdir -p "$verify"
-          unzip -q "$archive" -d "$verify"
-          test -f "$verify/bintracker.exe"
-          test -f "$verify/3rdparty/tclkit.exe"
-          test -f "$verify/resources/icons/save.png"
-          test -f "$verify/mdef/4VoiceMusicPlayer/4VoiceMusicPlayer.mdef"
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: .github/scripts/create-portable-archive.sh
 
       - name: Upload ${{ matrix.arch }} package
         uses: actions/upload-artifact@v4
@@ -266,7 +191,7 @@ jobs:
         run: |
           set -euo pipefail
           test -f dist/bintracker-windows-x64.zip
-          (cd dist && sha256sum *.zip > SHA256SUMS)
+          (cd dist && sha256sum -- ./*.zip > SHA256SUMS)
 
       - name: Publish release
         env:
