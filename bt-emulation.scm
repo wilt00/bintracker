@@ -17,14 +17,15 @@
   ;;; Check if the executable PROGRAM-NAME exists in $PATH and user has the
   ;;; necessary permissions to run it.
   (define (executable-exists? program-name)
-    (cond-expand
-      (windows (and (file-exists? program-name)
-		    (file-executable? program-name)))
-      (else (find (lambda (dir)
-		    (let ((path (make-pathname dir program-name)))
-		      (and (file-exists? path)
-			   (file-executable? path))))
-		  (string-split (get-environment-variable "PATH") ":")))))
+    (define (executable-file? path)
+      (and (file-exists? path) (file-executable? path)))
+    (or (executable-file? program-name)
+	(let ((search-path (get-environment-variable "PATH")))
+	  (and search-path
+	       (find (lambda (dir)
+		       (executable-file? (make-pathname dir program-name)))
+		     (string-split search-path
+				   (cond-expand (windows ";") (else ":"))))))))
 
   (define (check-emulator program-name)
     (unless (executable-exists? program-name)
