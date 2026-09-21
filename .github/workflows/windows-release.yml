@@ -32,7 +32,7 @@ jobs:
 
       - name: Cache Tclkit
         id: cache-tclkit
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}\tclkit\tclkit.exe
           key: tclkit-8.6.3-win32-x86_64-${{ env.TCLKIT_SHA256 }}
@@ -55,7 +55,7 @@ jobs:
           }
 
       - name: Pass Tclkit to build jobs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tclkit
           path: ${{ runner.temp }}\tclkit\tclkit.exe
@@ -87,7 +87,7 @@ jobs:
           git config --global core.eol lf
 
       - name: Check out the exact release commit
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
 
@@ -116,7 +116,7 @@ jobs:
             sqlite3:p
 
       - name: Cache Chicken package
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}\chicken-5.4.pkg.tar.zst
           key: chicken-package-${{ matrix.msystem }}-${{ matrix.chicken-sha256 }}
@@ -138,7 +138,7 @@ jobs:
 
       - name: Cache Chicken eggs
         id: cache-eggs
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}\msys64\${{ matrix.prefix }}\lib\chicken\11
           key: chicken-eggs-v1-${{ matrix.msystem }}-${{ steps.chicken.outputs.version }}
@@ -146,14 +146,26 @@ jobs:
       - name: Install Chicken eggs
         if: steps.cache-eggs.outputs.cache-hit != 'true'
         run: |
-          chicken-install \
-            srfi-18 check-errors args base64 bitstring comparse coops \
-            list-utils matchable pstk s11n simple-md5 sqlite3 \
-            stb-image stb-image-write srfi-1 srfi-4 srfi-13 srfi-14 \
+          eggs=(
+            srfi-18 check-errors args base64 bitstring comparse coops
+            list-utils matchable pstk s11n simple-md5 sqlite3
+            stb-image stb-image-write srfi-1 srfi-4 srfi-13 srfi-14
             srfi-69 shell stack test typed-records web-colors
+          )
+          for attempt in 1 2 3; do
+            if chicken-install "${eggs[@]}"; then
+              exit 0
+            fi
+            if test "$attempt" -eq 3; then
+              echo 'Chicken egg installation failed after three attempts.' >&2
+              exit 1
+            fi
+            echo "Chicken egg installation attempt $attempt failed; retrying..." >&2
+            sleep $((attempt * 15))
+          done
 
       - name: Add Tclkit
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: tclkit
           path: 3rdparty
@@ -244,7 +256,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download packages
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: package-*
           path: dist
