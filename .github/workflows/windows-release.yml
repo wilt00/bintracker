@@ -122,10 +122,18 @@ jobs:
             toolchain:p
             sqlite3:p
 
+      - name: Cache Chicken package
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\chicken-5.4.pkg.tar.zst
+          key: chicken-package-${{ matrix.msystem }}-${{ matrix.chicken-sha256 }}
+
       - name: Install Chicken 5.4
         run: |
           package="$RUNNER_TEMP/chicken-5.4.pkg.tar.zst"
-          curl --fail --location '${{ matrix.chicken-package }}' --output "$package"
+          if ! test -f "$package"; then
+            curl --fail --location '${{ matrix.chicken-package }}' --output "$package"
+          fi
           echo '${{ matrix.chicken-sha256 }}  '"$package" | sha256sum --check
           pacman --noconfirm -U "$package"
 
