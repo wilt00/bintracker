@@ -9,7 +9,7 @@ eggs=(
 )
 
 for attempt in 1 2 3; do
-  if chicken-install "${eggs[@]}"; then
+  if chicken-install -verbose "${eggs[@]}"; then
     exit 0
   fi
 
