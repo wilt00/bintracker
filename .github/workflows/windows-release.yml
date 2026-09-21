@@ -1,0 +1,276 @@
+name: Windows release
+
+on:
+  push:
+    branches:
+      - personal
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-release
+  cancel-in-progress: false
+
+env:
+  TCLKIT_URL: https://tclkits.rkeene.org/fossil/raw/tclkit-8.6.3-win32-x86_64.exe?name=403c507437d0b10035c7839f22f5bb806ec1f491
+  TCLKIT_SHA256: 5292399891398ce13af0e32fa98dab02e6f0134ea9738515649d7e649eff0942
+
+jobs:
+  prepare:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Set release version
+        id: version
+        shell: pwsh
+        run: |
+          $date = [DateTime]::UtcNow.ToString('yyyy.MMdd')
+          "version=$date.$env:GITHUB_RUN_NUMBER.$env:GITHUB_RUN_ATTEMPT" >> $env:GITHUB_OUTPUT
+
+      - name: Cache Tclkit
+        id: cache-tclkit
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\tclkit\tclkit.exe
+          key: tclkit-8.6.3-win32-x86_64-${{ env.TCLKIT_SHA256 }}
+
+      - name: Download Tclkit
+        if: steps.cache-tclkit.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $destination = Join-Path $env:RUNNER_TEMP 'tclkit\tclkit.exe'
+          New-Item -ItemType Directory -Force (Split-Path $destination) | Out-Null
+          Invoke-WebRequest -UseBasicParsing $env:TCLKIT_URL -OutFile $destination
+
+      - name: Verify Tclkit
+        shell: pwsh
+        run: |
+          $path = Join-Path $env:RUNNER_TEMP 'tclkit\tclkit.exe'
+          $actual = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $env:TCLKIT_SHA256) {
+            throw "Tclkit checksum mismatch: $actual"
+          }
+
+      - name: Pass Tclkit to build jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: tclkit
+          path: ${{ runner.temp }}\tclkit\tclkit.exe
+          if-no-files-found: error
+          retention-days: 1
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - msystem: UCRT64
+            runner: windows-latest
+            arch: x64
+            prefix: ucrt64
+            object-arch: i386:x86-64
+            chicken-package: https://mirror.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-chicken-5.4.0-1-any.pkg.tar.zst
+            chicken-sha256: 56b8e231ce00fa5812d4d2b77f8a5d288298596c71bd0316980ca36ffd94302e
+          - msystem: CLANGARM64
+            runner: windows-11-arm
+            arch: arm64
+            prefix: clangarm64
+            object-arch: aarch64
+            chicken-package: https://mirror.msys2.org/mingw/clangarm64/mingw-w64-clang-aarch64-chicken-5.4.0-1-any.pkg.tar.zst
+            chicken-sha256: 736d8bc5935ca768ad92edfbae08e70bdfca4dbc78a436ecc9539aa934f701b3
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Configure LF checkouts
+        shell: pwsh
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - name: Check out the exact release commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Verify script line endings
+        shell: pwsh
+        run: |
+          $scripts = git ls-files '*.scm' '*.lua' 'build/Makefile*'
+          $withCr = foreach ($script in $scripts) {
+            if ([IO.File]::ReadAllBytes((Resolve-Path $script)) -contains 13) { $script }
+          }
+          if ($withCr) { throw "CRLF found in scripts: $($withCr -join ', ')" }
+
+      - name: Set up MSYS2 ${{ matrix.msystem }}
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          update: true
+          cache: true
+          install: >-
+            curl
+            make
+            unzip
+            zip
+          pacboy: >-
+            toolchain:p
+            sqlite3:p
+
+      - name: Install Chicken 5.4
+        run: |
+          package="$RUNNER_TEMP/chicken-5.4.pkg.tar.zst"
+          curl --fail --location '${{ matrix.chicken-package }}' --output "$package"
+          echo '${{ matrix.chicken-sha256 }}  '"$package" | sha256sum --check
+          pacman --noconfirm -U "$package"
+
+      - name: Determine Chicken version
+        id: chicken
+        run: |
+          package="${MINGW_PACKAGE_PREFIX}-chicken"
+          echo "version=$(pacman -Q "$package" | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chicken eggs
+        id: cache-eggs
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\msys64\${{ matrix.prefix }}\lib\chicken\11
+          key: chicken-eggs-v1-${{ matrix.msystem }}-${{ steps.chicken.outputs.version }}
+
+      - name: Install Chicken eggs
+        if: steps.cache-eggs.outputs.cache-hit != 'true'
+        run: |
+          chicken-install \
+            srfi-18 check-errors args base64 bitstring comparse coops \
+            list-utils matchable pstk s11n simple-md5 sqlite3 \
+            stb-image stb-image-write srfi-1 srfi-4 srfi-13 srfi-14 \
+            srfi-69 shell stack test typed-records web-colors
+
+      - name: Add Tclkit
+        uses: actions/download-artifact@v4
+        with:
+          name: tclkit
+          path: 3rdparty
+
+      - name: Build and test
+        run: |
+          cd build
+          make -f Makefile.msys RELEASE=1 bintracker.exe
+
+          dependencies="$(ldd ./bintracker.exe)"
+          printf '%s\n' "$dependencies"
+          if grep -q 'not found' <<<"$dependencies"; then
+            echo 'A runtime DLL could not be resolved.' >&2
+            exit 1
+          fi
+          while IFS= read -r dependency; do
+            case "$dependency" in
+              "$MINGW_PREFIX"/bin/*.dll) cp -f "$dependency" . ;;
+            esac
+          done < <(awk '/=> \// { print $3 }' <<<"$dependencies")
+
+          objdump -f bintracker.exe | tee object-format.txt
+          grep -F 'architecture: ${{ matrix.object-arch }}' object-format.txt
+
+      - name: Test bundled Tclkit
+        run: |
+          smoke_script="$RUNNER_TEMP/tclkit-smoke.tcl"
+          smoke_result="$RUNNER_TEMP/tclkit-smoke.txt"
+          cat > "$smoke_script" <<'EOF'
+          package require Tk
+          wm withdraw .
+          set channel [open [lindex $argv 0] w]
+          puts $channel [info patchlevel]
+          close $channel
+          destroy .
+          exit
+          EOF
+          rm -f "$smoke_result"
+          ./build/3rdparty/tclkit.exe "$smoke_script" "$smoke_result"
+          for attempt in {1..50}; do
+            test -f "$smoke_result" && break
+            sleep 0.1
+          done
+          grep -E '^8\.6\.' "$smoke_result"
+
+      - name: Create portable archive
+        run: |
+          stage="$RUNNER_TEMP/bintracker"
+          archive="$GITHUB_WORKSPACE/bintracker-windows-${{ matrix.arch }}.zip"
+          rm -rf "$stage"
+          mkdir -p "$stage/3rdparty"
+
+          cp build/bintracker.exe "$stage/"
+          find build -maxdepth 1 -type f -iname '*.dll' -exec cp -f '{}' "$stage/" ';'
+          cp build/3rdparty/tclkit.exe "$stage/3rdparty/"
+          cp -r build/config build/mame-bridge build/mdal-targets build/mdef \
+            build/plugins build/resources build/roms build/tunes "$stage/"
+          cp LICENSE "$stage/"
+
+          test -f "$stage/bintracker.exe"
+          test -f "$stage/3rdparty/tclkit.exe"
+          test ! -e "$stage/3rdparty/mame"
+          ! find "$stage" -type f -iname 'mame.exe' -print -quit | grep -q .
+          grep -F 'program-name: "mame.exe"' "$stage/config/emulators.windows.scm"
+
+          (cd "$stage" && zip -q -9 -r "$archive" .)
+          verify="$RUNNER_TEMP/archive-check"
+          rm -rf "$verify"
+          mkdir -p "$verify"
+          unzip -q "$archive" -d "$verify"
+          test -f "$verify/bintracker.exe"
+          test -f "$verify/3rdparty/tclkit.exe"
+          test -f "$verify/resources/icons/save.png"
+          test -f "$verify/mdef/4VoiceMusicPlayer/4VoiceMusicPlayer.mdef"
+
+      - name: Upload ${{ matrix.arch }} package
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.arch }}
+          path: bintracker-windows-${{ matrix.arch }}.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          path: dist
+          merge-multiple: true
+
+      - name: Verify assets and create checksums
+        run: |
+          set -euo pipefail
+          test -f dist/bintracker-windows-x64.zip
+          test -f dist/bintracker-windows-arm64.zip
+          (cd dist && sha256sum *.zip > SHA256SUMS)
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          cat > release-notes.md <<EOF
+          Windows packages built from commit \`${GITHUB_SHA}\`.
+
+          - \`bintracker-windows-x64.zip\`: MSYS2 UCRT64 build
+          - \`bintracker-windows-arm64.zip\`: MSYS2 CLANGARM64 build (untested on physical ARM64 hardware)
+
+          Tclkit is bundled. MAME is not bundled; install it globally so \`mame.exe\` is available on \`PATH\`.
+          EOF
+          gh release create "v${VERSION}" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Bintracker ${VERSION}" \
+            --notes-file release-notes.md
