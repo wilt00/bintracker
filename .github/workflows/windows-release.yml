@@ -75,13 +75,6 @@ jobs:
             object-arch: i386:x86-64
             chicken-package: https://mirror.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-chicken-5.4.0-1-any.pkg.tar.zst
             chicken-sha256: 56b8e231ce00fa5812d4d2b77f8a5d288298596c71bd0316980ca36ffd94302e
-          - msystem: CLANGARM64
-            runner: windows-11-arm
-            arch: arm64
-            prefix: clangarm64
-            object-arch: aarch64
-            chicken-package: https://mirror.msys2.org/mingw/clangarm64/mingw-w64-clang-aarch64-chicken-5.4.0-1-any.pkg.tar.zst
-            chicken-sha256: 736d8bc5935ca768ad92edfbae08e70bdfca4dbc78a436ecc9539aa934f701b3
     runs-on: ${{ matrix.runner }}
     defaults:
       run:
@@ -261,7 +254,6 @@ jobs:
         run: |
           set -euo pipefail
           test -f dist/bintracker-windows-x64.zip
-          test -f dist/bintracker-windows-arm64.zip
           (cd dist && sha256sum *.zip > SHA256SUMS)
 
       - name: Publish release
@@ -273,7 +265,6 @@ jobs:
           Windows packages built from commit \`${GITHUB_SHA}\`.
 
           - \`bintracker-windows-x64.zip\`: MSYS2 UCRT64 build
-          - \`bintracker-windows-arm64.zip\`: MSYS2 CLANGARM64 build; its bundled x64 Tclkit runs through Windows emulation (ARM64 package untested)
 
           Tclkit is bundled. MAME is not bundled; install it globally so \`mame.exe\` is available on \`PATH\`.
           EOF
