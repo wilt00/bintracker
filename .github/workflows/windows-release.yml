@@ -186,6 +186,10 @@ jobs:
       - name: Test bundled Tclkit
         run: .github/scripts/test-tclkit.sh
 
+      - name: Smoke-test Bintracker startup
+        shell: pwsh
+        run: .github/scripts/test-bintracker.ps1
+
       - name: Create portable archive
         env:
           ARCH: ${{ matrix.arch }}
