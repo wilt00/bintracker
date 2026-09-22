@@ -138,8 +138,12 @@
       (flatten (remove null? required))))
 
   ;;; Match operands against instruction parser options.
-  (define (match-operands operands parser-options)
+  (define (match-operands operands parser-options #!optional opcode)
     ;; (print "match-operands " operands " " parser-options)
+    (unless (list? parser-options)
+      (error 'schemta#match-operands
+             "parser options is not a list"
+             opcode operands parser-options))
     (let ((m (find (lambda (po)
 		     (parse (followed-by (car po) end-of-input)
 			    (car operands)))
@@ -147,7 +151,7 @@
       (if m
 	  (if (= 1 (length operands))
 	      (cadr m)
-	      (match-operands (cdr operands) (cadr m)))
+	      (match-operands (cdr operands) (cadr m) opcode))
 	  (error 'match-operands (string-append "invalid operand in "
 						(->string operands))))))
 
@@ -180,7 +184,7 @@
   ;;; Match the operands of an instruction against the options in the
   ;;; target instruction table, and return a list containing the parsed operands
   ;;; in car, and the output composition in cadr.
-  (define (resolve-operands operands option-lst target)
+  (define (resolve-operands operands option-lst target #!optional opcode)
     (unless (list? operands)
       (error 'schemta#resolve-operands "operands is not a list" operands))
     (let ((base (alist-ref (length operands) option-lst)))
@@ -188,7 +192,7 @@
 	  (if (null-list? operands)
 	      (list '() base)
 	      (list (parse-operands operands target)
-		    (match-operands operands (car base))))
+		    (match-operands operands (car base) opcode)))
 	  (error "wrong number of operands"))))
 
   ;;; Returns either an asm-instruction structure, or a list of bytes if the
@@ -199,7 +203,7 @@
 					   opcode
 					   #f)))
       (if options
-	  (resolve-operands operands (car options) target)
+	  (resolve-operands operands (car options) target opcode)
 	  (error (string-append "unknown mnemonic: " (->string opcode))))))
 
   ;; ---------------------------------------------------------------------------
