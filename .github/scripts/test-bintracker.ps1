@@ -10,6 +10,7 @@ if (-not $WorkingDirectory) {
 }
 $WorkingDirectory = (Resolve-Path $WorkingDirectory).Path
 $executable = Join-Path $WorkingDirectory 'bintracker.exe'
+$database = Join-Path $WorkingDirectory 'bt.db'
 $stdout = Join-Path $env:RUNNER_TEMP 'bintracker-smoke.stdout.txt'
 $stderr = Join-Path $env:RUNNER_TEMP 'bintracker-smoke.stderr.txt'
 $crashLogsBefore = @{}
@@ -17,7 +18,7 @@ Get-ChildItem $WorkingDirectory -Filter 'crash-*.log' | ForEach-Object {
   $crashLogsBefore[$_.FullName] = $_.LastWriteTimeUtc
 }
 
-Remove-Item $stdout, $stderr -Force -ErrorAction SilentlyContinue
+Remove-Item $stdout, $stderr, $database -Force -ErrorAction SilentlyContinue
 $process = Start-Process -FilePath $executable `
   -WorkingDirectory $WorkingDirectory `
   -RedirectStandardOutput $stdout `
@@ -45,7 +46,17 @@ try {
     throw 'Bintracker generated a crash log during startup.'
   }
 
-  Write-Host 'Bintracker remained running without a crash log for 10 seconds; startup smoke test passed.'
+  $sqlite = Get-Command sqlite3.exe -ErrorAction Stop
+  $expectedMdefCount = @(Get-ChildItem (Join-Path $WorkingDirectory 'mdef') -Directory).Count
+  $actualMdefCount = & $sqlite.Source $database 'SELECT COUNT(*) FROM mdefs;'
+  if ($LASTEXITCODE -ne 0) {
+    throw "Could not inspect the generated MDEF database (sqlite3 exit code $LASTEXITCODE)."
+  }
+  if ([int]$actualMdefCount -ne $expectedMdefCount) {
+    throw "Only $actualMdefCount of $expectedMdefCount MDEFs loaded during startup."
+  }
+
+  Write-Host "Bintracker remained running and loaded all $actualMdefCount MDEFs; startup smoke test passed."
 }
 finally {
   if (-not $process.HasExited) {
