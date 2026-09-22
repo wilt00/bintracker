@@ -118,6 +118,10 @@
 		     ((condition-property-accessor 'mdal 'message) exn)
 		     ((condition-property-accessor 'exn 'message) exn))
 		 ")")
+	  (flush-output)
+	  (print-error-message exn (current-error-port)
+			       (string-append "MDEF " mdef-id))
+	  (flush-output (current-error-port))
 	  #f)
       (let ((mdef (file->mdef mdal-mdef-dir mdef-id)))
 	(list (string-append
