@@ -1,18 +1,25 @@
+param(
+  [string] $WorkingDirectory
+)
+
 $ErrorActionPreference = 'Stop'
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$buildDir = Join-Path $repoRoot 'build'
-$executable = Join-Path $buildDir 'bintracker.exe'
+if (-not $WorkingDirectory) {
+  $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+  $WorkingDirectory = Join-Path $repoRoot 'build'
+}
+$WorkingDirectory = (Resolve-Path $WorkingDirectory).Path
+$executable = Join-Path $WorkingDirectory 'bintracker.exe'
 $stdout = Join-Path $env:RUNNER_TEMP 'bintracker-smoke.stdout.txt'
 $stderr = Join-Path $env:RUNNER_TEMP 'bintracker-smoke.stderr.txt'
 $crashLogsBefore = @{}
-Get-ChildItem $buildDir -Filter 'crash-*.log' | ForEach-Object {
+Get-ChildItem $WorkingDirectory -Filter 'crash-*.log' | ForEach-Object {
   $crashLogsBefore[$_.FullName] = $_.LastWriteTimeUtc
 }
 
 Remove-Item $stdout, $stderr -Force -ErrorAction SilentlyContinue
 $process = Start-Process -FilePath $executable `
-  -WorkingDirectory $buildDir `
+  -WorkingDirectory $WorkingDirectory `
   -RedirectStandardOutput $stdout `
   -RedirectStandardError $stderr `
   -PassThru
@@ -26,7 +33,7 @@ try {
     throw "Bintracker exited during startup with code $($process.ExitCode)."
   }
 
-  $newCrashLogs = @(Get-ChildItem $buildDir -Filter 'crash-*.log' | Where-Object {
+  $newCrashLogs = @(Get-ChildItem $WorkingDirectory -Filter 'crash-*.log' | Where-Object {
     -not $crashLogsBefore.ContainsKey($_.FullName) -or
       $_.LastWriteTimeUtc -gt $crashLogsBefore[$_.FullName]
   })
