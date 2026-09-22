@@ -211,9 +211,9 @@
 				  (in (char-set-difference
 				       (char-set-union char-set:graphic
 						       horizontal-whitespace)
-				       ;; TODO for some reason this line fails
-				       ;; when emitting a .types file.
-				       (->char-set #\")))))
+				       ;; Avoid ->char-set's broken character specialization
+				       ;; in optimized static CHICKEN 5.4 builds.
+				       (string->char-set "\"")))))
 			 (is #\"))))
 
   (define (in-parens parser)
@@ -1025,11 +1025,11 @@
 					       (is #\"))
 				  (in (char-set-difference
 				       (char-set-union char-set:graphic
-						       (->char-set #\newline))
-				       (->char-set #\")))))
+						       (string->char-set "\n"))
+				       (string->char-set "\"")))))
 			 (is #\"))
 		       (in (char-set-difference char-set:printing
-						(->char-set #\newline)))))
+						(string->char-set "\n")))))
 	      (is #\newline))))
 	   (string-append source "\n")))
 

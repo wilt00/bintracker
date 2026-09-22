@@ -115,6 +115,26 @@
   (defstruct app-keys
     (global '()) (console '()) (edit '()) (note-entry '()) (plugins '()))
 
+  ;;; Normalize a Tk key specifier for the current platform.
+  (define (normalize-key-spec key-spec)
+    (cond-expand
+      ;; Tk on Windows calls ISO_Left_Tab "Shift-Tab".
+      (windows (string->symbol
+		(string-translate* (symbol->string key-spec)
+				   '(("ISO_Left_Tab" . "Shift-Tab")))))
+      (else key-spec)))
+
+  ;;; Normalize all bindings in a keymap read from a configuration file.
+  (define (normalize-keymap keymap)
+    (map (lambda (entry)
+	   (if (pair? entry)
+	       (map (lambda (binding)
+		      (cons (normalize-key-spec (car binding))
+			    (cdr binding)))
+		    entry)
+	       entry))
+	 keymap))
+
   ;;; (procedure (settings . ARGS))
   ;;; The global application settings registry. Use as follows:
   ;;;
@@ -124,9 +144,10 @@
   ;;; PARAM does not exist, create a new entry for it.
   (define settings
     (let ((s `((keymap . ,(apply make-app-keys
-				 (cdr (call-with-input-file
-					  "config/keymaps/en.keymap"
-					read))))
+				 (normalize-keymap
+				  (cdr (call-with-input-file
+					   "config/keymaps/en.keymap"
+					 read)))))
 	       (number-base . 16)
 	       (mdal-mdef-dir . "mdef/")
 	       (theme-generator . default-theme-generator)
