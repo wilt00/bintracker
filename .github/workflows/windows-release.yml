@@ -193,7 +193,10 @@ jobs:
 
       - name: Test archive
         shell: pwsh
-        run: .github/scripts/test-bintracker.ps1 -WorkingDirectory (Join-Path $env:RUNNER_TEMP 'archive-check')
+        run: >-
+          .github/scripts/test-bintracker.ps1
+          -WorkingDirectory (Join-Path $env:RUNNER_TEMP 'archive-check')
+          -SqliteExecutable (Join-Path $env:RUNNER_TEMP 'msys64\${{ matrix.prefix }}\bin\sqlite3.exe')
 
       - name: Upload ${{ matrix.arch }} package
         uses: actions/upload-artifact@v4

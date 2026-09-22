@@ -1,5 +1,6 @@
 param(
-  [string] $WorkingDirectory
+  [string] $WorkingDirectory,
+  [string] $SqliteExecutable
 )
 
 $ErrorActionPreference = 'Stop'
@@ -9,6 +10,12 @@ if (-not $WorkingDirectory) {
   $WorkingDirectory = Join-Path $repoRoot 'build'
 }
 $WorkingDirectory = (Resolve-Path $WorkingDirectory).Path
+if ($SqliteExecutable) {
+  $SqliteExecutable = (Resolve-Path $SqliteExecutable).Path
+}
+else {
+  $SqliteExecutable = (Get-Command sqlite3.exe -ErrorAction Stop).Source
+}
 $executable = Join-Path $WorkingDirectory 'bintracker.exe'
 $database = Join-Path $WorkingDirectory 'bt.db'
 $stdout = Join-Path $env:RUNNER_TEMP 'bintracker-smoke.stdout.txt'
@@ -46,9 +53,8 @@ try {
     throw 'Bintracker generated a crash log during startup.'
   }
 
-  $sqlite = Get-Command sqlite3.exe -ErrorAction Stop
   $expectedMdefCount = @(Get-ChildItem (Join-Path $WorkingDirectory 'mdef') -Directory).Count
-  $actualMdefCount = & $sqlite.Source $database 'SELECT COUNT(*) FROM mdefs;'
+  $actualMdefCount = & $SqliteExecutable $database 'SELECT COUNT(*) FROM mdefs;'
   if ($LASTEXITCODE -ne 0) {
     throw "Could not inspect the generated MDEF database (sqlite3 exit code $LASTEXITCODE)."
   }
