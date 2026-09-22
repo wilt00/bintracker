@@ -139,13 +139,7 @@
      key-group
      (if (eq? key-group 'note-entry)
 	 '()
-	 (alist-update (cond-expand
-			 ;; might need to do this for macOS as well
-			 (windows (string->symbol
-				   (string-translate*
-				    (symbol->string key-spec)
-				    '(("ISO_Left_Tab" . "Shift-Tab")))))
-			 (else key-spec))
+	 (alist-update (normalize-key-spec key-spec)
 		       (list action)
 		       (get-keybinding-group key-group)))))
 
@@ -209,20 +203,7 @@
 	  (settings
 	   'keymap
 	   (apply make-app-keys
-		  (cond-expand
-		    (windows
-		     (map (lambda (entry)
-			    (if (pair? entry)
-				(map (lambda (b)
-				       (list (if (eqv? '<Control-ISO_Left_Tab>
-						       (car b))
-						 '<Control-Shift-Tab>
-						 (car b))
-					     (cadr b)))
-				     entry)
-				entry))
-			  (cdr my-keymap)))
-		    (else (cdr my-keymap)))))
+		  (normalize-keymap (cdr my-keymap))))
 	  (error "Not a valid Bintracker keymap."))))
 
 
