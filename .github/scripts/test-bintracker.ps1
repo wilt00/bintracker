@@ -32,12 +32,23 @@ $process = Start-Process -FilePath $executable `
   -RedirectStandardError $stderr `
   -PassThru
 
+function Stop-TestProcess {
+  if (-not $process.HasExited) {
+    taskkill.exe /PID $process.Id /T /F | Out-Host
+    $process.WaitForExit()
+  }
+}
+
+function Write-CapturedOutput {
+  Write-Host '--- stdout ---'
+  if (Test-Path $stdout) { Get-Content $stdout }
+  Write-Host '--- stderr ---'
+  if (Test-Path $stderr) { Get-Content $stderr }
+}
+
 try {
   if ($process.WaitForExit(10000)) {
-    Write-Host '--- stdout ---'
-    if (Test-Path $stdout) { Get-Content $stdout }
-    Write-Host '--- stderr ---'
-    if (Test-Path $stderr) { Get-Content $stderr }
+    Write-CapturedOutput
     throw "Bintracker exited during startup with code $($process.ExitCode)."
   }
 
@@ -56,17 +67,18 @@ try {
   $expectedMdefCount = @(Get-ChildItem (Join-Path $WorkingDirectory 'mdef') -Directory).Count
   $actualMdefCount = & $SqliteExecutable $database 'SELECT COUNT(*) FROM mdefs;'
   if ($LASTEXITCODE -ne 0) {
+    Stop-TestProcess
+    Write-CapturedOutput
     throw "Could not inspect the generated MDEF database (sqlite3 exit code $LASTEXITCODE)."
   }
   if ([int]$actualMdefCount -ne $expectedMdefCount) {
+    Stop-TestProcess
+    Write-CapturedOutput
     throw "Only $actualMdefCount of $expectedMdefCount MDEFs loaded during startup."
   }
 
   Write-Host "Bintracker remained running and loaded all $actualMdefCount MDEFs; startup smoke test passed."
 }
 finally {
-  if (-not $process.HasExited) {
-    taskkill.exe /PID $process.Id /T /F | Out-Host
-    $process.WaitForExit()
-  }
+  Stop-TestProcess
 }
