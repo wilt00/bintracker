@@ -14,7 +14,7 @@ endif
 
 bintracker.exe: $(BT_SRC)bintracker.scm bintracker-core.obj\
  mame-bridge config roms plugins resources aux-files\
- mdal-targets 3rdparty
+ mdal-targets
 	$(CSC) $< -d3 -O2 -static -compile-syntax -feature windows -Wl,-v,-lsqlite3\
  -link bintracker-core,bt-state,bt-types,bt-gui,bt-gui-lolevel,bt-db,bt-emulation,bt-maths,mdal,md-def,md-command,md-helpers,md-types,md-parser,md-note-table,md-audio -o $@
 
@@ -209,10 +209,6 @@ aux-files:
 mdal-targets:
 	cp -r $(MDAL_SRC)mdal-targets ./
 
-.PHONY: 3rdparty
-3rdparty:
-	cp -r $(BT_SRC)3rdparty ./
-
 # run unit tests
 .PHONY: tests
 tests: schemta-tests
@@ -234,6 +230,6 @@ m6502-tests: schemta-exe mdal-targets
 clean:
 	-del *.obj *.import.scm *.import *.link *.types bintracker.exe schemta.exe bt.db
 	-del /f /q /s docs plugins mame-bridge config roms mdef tunes mdal-targets\
- gendoc documentation tclkit resources
+ gendoc documentation bin lib resources
 	-rmdir /q /s docs plugins mame-bridge config roms mdef tunes mdal-targets\
- gendoc documentation tclkit resources
+ gendoc documentation bin lib resources

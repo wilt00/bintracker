@@ -13,10 +13,6 @@ concurrency:
   group: windows-release
   cancel-in-progress: false
 
-env:
-  TCLKIT_URL: https://tclkits.rkeene.org/fossil/raw/tclkit-8.6.3-win32-x86_64.exe?name=403c507437d0b10035c7839f22f5bb806ec1f491
-  TCLKIT_SHA256: 5292399891398ce13af0e32fa98dab02e6f0134ea9738515649d7e649eff0942
-
 jobs:
   prepare:
     runs-on: windows-latest
@@ -29,38 +25,6 @@ jobs:
         run: |
           $date = [DateTime]::UtcNow.ToString('yyyy.MMdd')
           "version=$date.$env:GITHUB_RUN_NUMBER.$env:GITHUB_RUN_ATTEMPT" >> $env:GITHUB_OUTPUT
-
-      - name: Cache Tclkit
-        id: cache-tclkit
-        uses: actions/cache@v6
-        with:
-          path: ${{ runner.temp }}\tclkit\tclkit.exe
-          key: tclkit-8.6.3-win32-x86_64-${{ env.TCLKIT_SHA256 }}
-
-      - name: Download Tclkit
-        if: steps.cache-tclkit.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-          $destination = Join-Path $env:RUNNER_TEMP 'tclkit\tclkit.exe'
-          New-Item -ItemType Directory -Force (Split-Path $destination) | Out-Null
-          Invoke-WebRequest -UseBasicParsing $env:TCLKIT_URL -OutFile $destination
-
-      - name: Verify Tclkit
-        shell: pwsh
-        run: |
-          $path = Join-Path $env:RUNNER_TEMP 'tclkit\tclkit.exe'
-          $actual = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actual -ne $env:TCLKIT_SHA256) {
-            throw "Tclkit checksum mismatch: $actual"
-          }
-
-      - name: Pass Tclkit to build jobs
-        uses: actions/upload-artifact@v7
-        with:
-          name: tclkit
-          path: ${{ runner.temp }}\tclkit\tclkit.exe
-          if-no-files-found: error
-          retention-days: 1
 
   build:
     needs: prepare
@@ -114,6 +78,7 @@ jobs:
           pacboy: >-
             toolchain:p
             sqlite3:p
+            tk:p
 
       - name: Cache Chicken package
         uses: actions/cache@v6
@@ -172,19 +137,13 @@ jobs:
         if: steps.cache-eggs.outputs.cache-hit != 'true'
         run: .github/scripts/install-chicken-eggs.sh
 
-      - name: Add Tclkit
-        uses: actions/download-artifact@v8
-        with:
-          name: tclkit
-          path: 3rdparty
-
       - name: Build and test
         env:
           OBJECT_ARCH: ${{ matrix.object-arch }}
         run: .github/scripts/build-test.sh
 
-      - name: Test bundled Tclkit
-        run: .github/scripts/test-tclkit.sh
+      - name: Test bundled Wish
+        run: bash .github/scripts/test-wish.sh
 
       - name: Create portable archive
         env:
@@ -235,7 +194,7 @@ jobs:
 
           - \`bintracker-windows-x64.zip\`: MSYS2 UCRT64 build
 
-          Tclkit is bundled. MAME is not bundled; install it globally so \`mame.exe\` is available on \`PATH\`.
+          MAME is not bundled; install it globally so \`mame.exe\` is available on \`PATH\`.
           EOF
           gh release create "v${VERSION}" dist/* \
             --repo "$GITHUB_REPOSITORY" \
