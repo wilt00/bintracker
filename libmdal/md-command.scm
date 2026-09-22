@@ -134,16 +134,29 @@
 
   ;;; Evaluate a note-table generator expression from an MDEF command.
   (define (eval-command-keys keys cpu-speed)
-    (case (car keys)
-      ((make-counters)
-       (apply make-counters (cdr keys)))
-      ((make-dividers)
-       (apply make-dividers (cons cpu-speed (cdr keys))))
-      ((make-inverse-dividers)
-       (apply make-inverse-dividers (cons cpu-speed (cdr keys))))
-      (else
-       (mdal-abort (string-append "unknown key generator "
-                                  (->string (car keys)))))))
+    (let ((generator (car keys))
+          (argument-count (length (cdr keys))))
+      (case generator
+        ((make-counters)
+         (if (= argument-count 4)
+             (make-counters (cadr keys) (caddr keys) (cadddr keys)
+                            (fifth keys))
+             (mdal-abort "make-counters expects 4 arguments")))
+        ((make-dividers make-inverse-dividers)
+         (if (memv argument-count '(3 4))
+             (let ((generate (if (eqv? generator 'make-dividers)
+                                 make-dividers
+                                 make-inverse-dividers)))
+               (if (= argument-count 3)
+                   (generate cpu-speed (cadr keys) (caddr keys)
+                             (cadddr keys))
+                   (generate cpu-speed (cadr keys) (caddr keys)
+                             (cadddr keys) (fifth keys))))
+             (mdal-abort (string-append (->string generator)
+                                        " expects 3 or 4 arguments"))))
+        (else
+         (mdal-abort (string-append "unknown key generator "
+                                    (->string generator)))))))
 
   ;;; Evaluate a MDCONF command definition expression. Returns a `command`
   ;;; object.
