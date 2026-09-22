@@ -119,16 +119,23 @@
 
   ;;; List the symbols required to evaluate the given OPERANDS
   (define (list-required-symbols operands)
-    (flatten (remove null-list?
-		     (map (lambda (op)
-			    (if (pair? op)
-				(case (car op)
-				  ((sexp-directive)
-				   (required-symbols (cadr op)))
-				  ((label local-label) (list (cadr op)))
-				  (else '()))
-				'()))
-			  operands))))
+    (unless (list? operands)
+      (error 'schemta#list-required-symbols
+             "operands is not a list" operands))
+    (let ((required
+           (map (lambda (op)
+                  (if (pair? op)
+                      (case (car op)
+                        ((sexp-directive)
+                         (required-symbols (cadr op)))
+                        ((label local-label) (list (cadr op)))
+                        (else '()))
+                      '()))
+                operands)))
+      (unless (every list? required)
+        (error 'schemta#list-required-symbols
+               "required symbols is not a list" required operands))
+      (flatten (remove null? required))))
 
   ;;; Match operands against instruction parser options.
   (define (match-operands operands parser-options)
@@ -174,6 +181,8 @@
   ;;; target instruction table, and return a list containing the parsed operands
   ;;; in car, and the output composition in cadr.
   (define (resolve-operands operands option-lst target)
+    (unless (list? operands)
+      (error 'schemta#resolve-operands "operands is not a list" operands))
     (let ((base (alist-ref (length operands) option-lst)))
       (if base
 	  (if (null-list? operands)
@@ -600,9 +609,14 @@
 		       (car (alist-ref what (asm-target-extra target)))))
 		    (current-origin (state 'current-origin))
 		    (symbol-ref (lambda (s) (symbol-lookup s state #f))))
-		 (let ((require-current-org (memv 'current-origin
-						  (flatten (last node))))
-		       (org (state 'current-origin))
+		 (let* ((composition (last node))
+                        (_ (unless (list? composition)
+                             (error 'schemta#do-instruction
+                                    "composition is not a list"
+                                    composition node)))
+                        (require-current-org (memv 'current-origin
+                                                   (flatten composition)))
+		        (org (state 'current-origin))
 		       (evaluated-operands
 			(map (cute eval-operand <> state) (third node))))
 		   (when org (state 'current-origin (fx+ org (cadr node))))
