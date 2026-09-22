@@ -26,7 +26,7 @@
 
   (import scheme (chicken base) (chicken string) (chicken io) (chicken format)
 	  (chicken condition)
-	  srfi-1 srfi-13 srfi-14 srfi-69 typed-records md-helpers)
+	  srfi-1 srfi-13 srfi-14 srfi-69 typed-records md-helpers md-note-table)
 
 
   ;;; command config record type
@@ -132,6 +132,19 @@
 		   (command-has-flag? (cdr x) 'enable-modifiers))
 		 base-commands)))
 
+  ;;; Evaluate a note-table generator expression from an MDEF command.
+  (define (eval-command-keys keys cpu-speed)
+    (case (car keys)
+      ((make-counters)
+       (apply make-counters (cdr keys)))
+      ((make-dividers)
+       (apply make-dividers (cons cpu-speed (cdr keys))))
+      ((make-inverse-dividers)
+       (apply make-inverse-dividers (cons cpu-speed (cdr keys))))
+      (else
+       (mdal-abort (string-append "unknown key generator "
+                                  (->string (car keys)))))))
+
   ;;; Evaluate a MDCONF command definition expression. Returns a `command`
   ;;; object.
   (define (eval-command path-prefix cpu-speed #!key id type bits default
@@ -161,18 +174,7 @@
 	     keys: (and keys
 			(if (pair? (car keys))
 			    (alist->hash-table keys)
-			    (eval `(let ((make-dividers
-					  (lambda (cycles bits rest
-							  #!optional (shift 1))
-					    (make-dividers ,cpu-speed cycles
-							   bits rest shift)))
-					 (make-inverse-dividers
-					  (lambda (cycles bits rest
-							  #!optional (shift 1))
-					    (make-inverse-dividers
-					     ,cpu-speed cycles bits rest
-					     shift))))
-				     ,keys))))
+			    (eval-command-keys keys cpu-speed)))
 	     flags: flags
 	     range: (or (and range (make-range min: (car range)
 					       max: (cadr range)))

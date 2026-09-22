@@ -71,9 +71,9 @@ md-note-table.obj: $(MDAL_SRC)utils/md-note-table.scm
 md-audio.obj: $(MDAL_SRC)utils/md-audio.scm
 	$(CSC) $(LIBFLAGS) $< -J -emit-types-file md-audio.types -unit md-audio -o $@
 
-md-command.obj: $(MDAL_SRC)md-command.scm md-helpers.obj
+md-command.obj: $(MDAL_SRC)md-command.scm md-helpers.obj md-note-table.obj
 	$(CSC) $(LIBFLAGS) $< -J -emit-types-file md-command.types\
- -uses md-helpers -unit md-command -o $@
+ -uses md-helpers -uses md-note-table -unit md-command -o $@
 
 md-def.obj: $(MDAL_SRC)md-def.scm $(BASEDEPS) md-command.obj\
  md-note-table.obj md-audio.obj schemta.obj

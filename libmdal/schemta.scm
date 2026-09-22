@@ -64,6 +64,17 @@
   (define %op2 #f)
   (define %op3 #f)
 
+  ;;; Evaluate target and assembler expressions in the interaction environment.
+  ;;; Compiled programs must first import Schemta's parser and assembler
+  ;;; bindings into that environment.
+  (define schemta-eval
+    (let ((initialized? #f))
+      (lambda (expr)
+        (unless initialized?
+          (eval '(import schemta))
+          (set! initialized? #t))
+        (eval expr))))
+
   ;; ---------------------------------------------------------------------------
   ;; Assembler primitives
   ;; ---------------------------------------------------------------------------
@@ -112,7 +123,7 @@
 		   ((pair? (car expr)) (cons (required-symbols (car expr))
 					     (required-symbols (cdr expr))))
 		   ((eq? 'symbol-ref (car expr))
-		    (list (eval (call-with-input-string
+		    (list (schemta-eval (call-with-input-string
 				 (string-downcase (->string (cadr expr)))
 				 read))))
 		   (else (required-symbols (cdr expr))))))
@@ -615,7 +626,7 @@
 				       (cadr evaluated-operands)))
 			    (%op3 (and (> (length evaluated-operands) 2)
 				       (caddr evaluated-operands))))
-			 (list (eval (last node))))
+			 (list (schemta-eval (last node))))
 		       (begin (state 'done? #f)
 			      (list node)))))))
 	(begin (and-let* ((org (state 'current-origin)))
@@ -809,7 +820,7 @@
 		      (lambda (s)
 			(not (eqv? 'undefined
 				   (symbol-lookup s state 'undefined))))))
-	  (let ((res (eval (cadr node))))
+	  (let ((res (schemta-eval (cadr node))))
 	    ;; (print "sexp-directive, have res: " res)
 	    (cond
 	     ((string? res) (begin (state 'done? #f)
@@ -932,7 +943,7 @@
 		(symbol
 		 (a-symbol (make-asm-target registers: registers
 					    flags: flags))))
-      (let* ((eval-fn-mapping (lambda (x) (list (car x) (eval (cadr x)))))
+      (let* ((eval-fn-mapping (lambda (x) (list (car x) (schemta-eval (cadr x)))))
 	     (_addressing-modes (map eval-fn-mapping addressing-modes))
 	     (_extra (map eval-fn-mapping extra)))
 	(fluid-let ((address (lambda (type)
@@ -947,7 +958,7 @@
 		      (if (>= depth operand-count)
 			  (cons 'list ops)
 			  (map (lambda (opt)
-				 (list (eval (car opt))
+				 (list (schemta-eval (car opt))
 				       (eval-operand-options
 					(cadr opt)
 					operand-count
