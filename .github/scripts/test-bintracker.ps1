@@ -19,8 +19,9 @@ else {
 }
 $executable = Join-Path $WorkingDirectory 'bintracker.exe'
 $database = Join-Path $WorkingDirectory 'bt.db'
-$stdout = Join-Path $env:RUNNER_TEMP 'bintracker-smoke.stdout.txt'
-$stderr = Join-Path $env:RUNNER_TEMP 'bintracker-smoke.stderr.txt'
+$tempDirectory = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
+$stdout = Join-Path $tempDirectory 'bintracker-smoke.stdout.txt'
+$stderr = Join-Path $tempDirectory 'bintracker-smoke.stderr.txt'
 $crashLogsBefore = @{}
 Get-ChildItem $WorkingDirectory -Filter 'crash-*.log' | ForEach-Object {
   $crashLogsBefore[$_.FullName] = $_.LastWriteTimeUtc
