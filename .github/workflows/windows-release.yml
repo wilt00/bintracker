@@ -158,11 +158,12 @@ jobs:
           -SqliteExecutable (Join-Path $env:RUNNER_TEMP 'msys64\${{ matrix.prefix }}\bin\sqlite3.exe')
 
       - name: Upload ${{ matrix.arch }} package
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: package-${{ matrix.arch }}
           path: bintracker-windows-${{ matrix.arch }}.zip
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
 
   release:

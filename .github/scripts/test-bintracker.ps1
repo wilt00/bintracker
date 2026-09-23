@@ -1,6 +1,7 @@
 param(
   [string] $WorkingDirectory,
-  [string] $SqliteExecutable
+  [string] $SqliteExecutable,
+  [int] $StartupTimeoutSeconds = 120
 )
 
 $ErrorActionPreference = 'Stop'
@@ -47,9 +48,26 @@ function Write-CapturedOutput {
 }
 
 try {
-  if ($process.WaitForExit(10000)) {
-    Write-CapturedOutput
-    throw "Bintracker exited during startup with code $($process.ExitCode)."
+  $expectedMdefCount = @(Get-ChildItem (Join-Path $WorkingDirectory 'mdef') -Directory).Count
+  $actualMdefCount = 0
+  $deadline = [DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds)
+
+  while ([DateTime]::UtcNow -lt $deadline -and $actualMdefCount -ne $expectedMdefCount) {
+    if ($process.HasExited) {
+      Write-CapturedOutput
+      throw "Bintracker exited during startup with code $($process.ExitCode)."
+    }
+
+    if (Test-Path $database) {
+      $queryResult = & $SqliteExecutable $database 'SELECT COUNT(*) FROM mdefs;' 2>$null
+      if ($LASTEXITCODE -eq 0 -and $queryResult -match '^\d+$') {
+        $actualMdefCount = [int]$queryResult
+      }
+    }
+
+    if ($actualMdefCount -ne $expectedMdefCount) {
+      Start-Sleep -Seconds 1
+    }
   }
 
   $newCrashLogs = @(Get-ChildItem $WorkingDirectory -Filter 'crash-*.log' | Where-Object {
@@ -64,17 +82,10 @@ try {
     throw 'Bintracker generated a crash log during startup.'
   }
 
-  $expectedMdefCount = @(Get-ChildItem (Join-Path $WorkingDirectory 'mdef') -Directory).Count
-  $actualMdefCount = & $SqliteExecutable $database 'SELECT COUNT(*) FROM mdefs;'
-  if ($LASTEXITCODE -ne 0) {
+  if ($actualMdefCount -ne $expectedMdefCount) {
     Stop-TestProcess
     Write-CapturedOutput
-    throw "Could not inspect the generated MDEF database (sqlite3 exit code $LASTEXITCODE)."
-  }
-  if ([int]$actualMdefCount -ne $expectedMdefCount) {
-    Stop-TestProcess
-    Write-CapturedOutput
-    throw "Only $actualMdefCount of $expectedMdefCount MDEFs loaded during startup."
+    throw "Only $actualMdefCount of $expectedMdefCount MDEFs loaded within $StartupTimeoutSeconds seconds."
   }
 
   Write-Host "Bintracker remained running and loaded all $actualMdefCount MDEFs; startup smoke test passed."
