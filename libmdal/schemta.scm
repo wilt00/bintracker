@@ -119,31 +119,20 @@
 
   ;;; List the symbols required to evaluate the given OPERANDS
   (define (list-required-symbols operands)
-    (unless (list? operands)
-      (error 'schemta#list-required-symbols
-             "operands is not a list" operands))
-    (let ((required
-           (map (lambda (op)
-                  (if (pair? op)
-                      (case (car op)
-                        ((sexp-directive)
-                         (required-symbols (cadr op)))
-                        ((label local-label) (list (cadr op)))
-                        (else '()))
-                      '()))
-                operands)))
-      (unless (every list? required)
-        (error 'schemta#list-required-symbols
-               "required symbols is not a list" required operands))
-      (flatten (remove null? required))))
+    (flatten (remove null-list?
+		     (map (lambda (op)
+			    (if (pair? op)
+				(case (car op)
+				  ((sexp-directive)
+				   (required-symbols (cadr op)))
+				  ((label local-label) (list (cadr op)))
+				  (else '()))
+				'()))
+			  operands))))
 
   ;;; Match operands against instruction parser options.
-  (define (match-operands operands parser-options #!optional opcode)
+  (define (match-operands operands parser-options)
     ;; (print "match-operands " operands " " parser-options)
-    (unless (list? parser-options)
-      (error 'schemta#match-operands
-             "parser options is not a list"
-             opcode operands parser-options))
     (let ((m (find (lambda (po)
 		     (parse (followed-by (car po) end-of-input)
 			    (car operands)))
@@ -151,7 +140,7 @@
       (if m
 	  (if (= 1 (length operands))
 	      (cadr m)
-	      (match-operands (cdr operands) (cadr m) opcode))
+	      (match-operands (cdr operands) (cadr m)))
 	  (error 'match-operands (string-append "invalid operand in "
 						(->string operands))))))
 
@@ -184,15 +173,13 @@
   ;;; Match the operands of an instruction against the options in the
   ;;; target instruction table, and return a list containing the parsed operands
   ;;; in car, and the output composition in cadr.
-  (define (resolve-operands operands option-lst target #!optional opcode)
-    (unless (list? operands)
-      (error 'schemta#resolve-operands "operands is not a list" operands))
+  (define (resolve-operands operands option-lst target)
     (let ((base (alist-ref (length operands) option-lst)))
       (if base
-	  (if (null-list? operands)
+	  (if (null? operands)
 	      (list '() base)
 	      (list (parse-operands operands target)
-		    (match-operands operands (car base) opcode)))
+		    (match-operands operands (car base))))
 	  (error "wrong number of operands"))))
 
   ;;; Returns either an asm-instruction structure, or a list of bytes if the
@@ -203,7 +190,7 @@
 					   opcode
 					   #f)))
       (if options
-	  (resolve-operands operands (car options) target opcode)
+	  (resolve-operands operands (car options) target)
 	  (error (string-append "unknown mnemonic: " (->string opcode))))))
 
   ;; ---------------------------------------------------------------------------
@@ -613,14 +600,9 @@
 		       (car (alist-ref what (asm-target-extra target)))))
 		    (current-origin (state 'current-origin))
 		    (symbol-ref (lambda (s) (symbol-lookup s state #f))))
-		 (let* ((composition (last node))
-                        (_ (unless (list? composition)
-                             (error 'schemta#do-instruction
-                                    "composition is not a list"
-                                    composition node)))
-                        (require-current-org (memv 'current-origin
-                                                   (flatten composition)))
-		        (org (state 'current-origin))
+		 (let ((require-current-org (memv 'current-origin
+						  (flatten (last node))))
+		       (org (state 'current-origin))
 		       (evaluated-operands
 			(map (cute eval-operand <> state) (third node))))
 		   (when org (state 'current-origin (fx+ org (cadr node))))
